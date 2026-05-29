@@ -60,6 +60,17 @@
 
 ## 使用方法
 
+### ⚠️ 重要提示
+
+**在运行 `--apply` 或 `--restore` 之前，请务必完全关闭 Cursor。**
+
+如果 Cursor 正在运行，可能会导致：
+- 文件被 Cursor 锁定，无法修改
+- Cursor 在运行时重新加载文件，导致修改被覆盖
+- 并发修改导致文件损坏或不一致
+
+确保 Cursor 完全退出后再执行脚本。
+
 ### 查看帮助
 
 ```bash
@@ -89,6 +100,21 @@ python CursorTranslate.py --restore
 - 还原 `workbench.html`
 - 还原 `product.json`
 - 删除生成的 `cursor_hanhua.js`
+
+### 清理早期版本遗留配置
+
+如果你之前使用过更早版本的汉化工具（修改了 `languagepacks.json` 或创建了 `cursor-local-zh-cn` 目录），可以使用以下命令清理：
+
+```bash
+python CursorTranslate.py --cleanup-legacy
+```
+
+该命令会：
+- 检查并恢复被修改的 `languagepacks.json`
+- 删除旧的本地语言包目录 `cursor-local-zh-cn`
+- 清理相关缓存文件
+
+**注意：** 此命令会检查文件标记，只清理确认由本工具创建的文件，避免误删用户自己的配置。
 
 ### 从 Cursor 源码提取候选词条
 
