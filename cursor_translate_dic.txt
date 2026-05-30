@@ -170,7 +170,9 @@
 "Auto-Run" => "自动运行"
 
 "Auto-Run Mode" => "自动运行模式"
+"Run Everything" => "运行所有内容"
 "Choose how Agent runs tools like command execution, MCP, and file writes. Tools will auto-run in a sandbox if possible. If not, they will respect the allowlist or ask for approval." => "设置智能体运行命令执行、MCP、文件写入等工具的方式。工具会优先在沙箱中自动运行；若无法沙箱运行，则将遵循白名单设置或请求您的批准。"
+"Choose how Agent runs tools like command execution, MCP, and file writes." => "设置智能体运行命令执行、MCP、文件写入等工具的方式。"
 "Auto-Run in Sandbox" => "在沙箱中自动运行"
 
 "Commands that can run automatically" => "可自动运行的命令"
@@ -441,6 +443,7 @@
 "Ignore Files in .cursorignore" => "忽略 .cursorignore 中的文件"
 "Configure Ignored Files" => "配置忽略的文件"
 "Auto-Accept Web Search" => "自动接受网络搜索"
+"Enabled by Run Everything Auto-Run Mode: Agent bypasses approval prompts for tools including Web Search." => "已由“运行所有内容”自动运行模式启用：智能体会绕过包括网页搜索在内的工具审批提示。"
 "Auto-Parse Links" => "自动解析链接"
 "Automatically parse links when pasted into Quick Edit (Ctrl+K) input" => "粘贴到快速编辑（Ctrl+K）输入时自动解析链接"
 "Crawl and index custom resources and developer docs" => "爬取和索引自定义资源和开发者文档"
@@ -564,6 +567,8 @@
 "More" => "更多"
 "Less" => "更少"
 "Hide" => "隐藏"
+"Expand All" => "全部展开"
+"Collapse All" => "全部折叠"
 "Copy" => "复制"
 "New" => "新建"
 "Preview" => "预览"
@@ -672,6 +677,7 @@
 
 // ==================== Home / Agent / 工作区页面 ====================
 "New Agent" => "新建智能体"
+"New Agent in Home" => "在主页新建智能体"
 "Automations" => "自动化"
 "Customize" => "自定义"
 "Workspaces" => "工作区"
@@ -1250,6 +1256,7 @@
 
 // ==================== Agent / Chat 右键菜单源码提取 ====================
 "Pin" => "固定"
+"Pin skills" => "固定技能"
 "Pinned" => "已固定"
 "Unpin" => "取消固定"
 "Rename" => "重命名"
@@ -1484,6 +1491,7 @@
 "Set up VM" => "已设置 VM"
 "Replacing environment" => "正在替换环境"
 "Replaced environment" => "已替换环境"
+"Cannot change environments while generating" => "生成期间无法切换环境"
 "Processing" => "正在处理"
 "Processed" => "已处理"
 "Executing" => "正在执行"
@@ -1659,5 +1667,8 @@
 
 # Chat Input
 "Add skills, MCPs and more" => "添加技能、MCP 等"
+"Add skills, MCPs and more /" => "添加技能、MCP 等 /"
+"Add skills, MCPs, and more" => "添加技能、MCP 等"
+"Add Skills, MCPs and more" => "添加技能、MCP 等"
 "Send follow" => "发送跟进"
 "Record CI findings" => "记录 CI 发现"
