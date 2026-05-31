@@ -17,6 +17,7 @@ from CursorTranslate import (
     remove_injected_script,
     insert_injection_code,
     create_backup,
+    restore_original,
     update_checksum,
     cleanup_legacy_language_pack,
     INJECTION_MARKER,
@@ -191,6 +192,66 @@ class TestInjectionAndBackup(unittest.TestCase):
                 if name.startswith(os.path.basename(backup_path) + '.')
             ]
             self.assertEqual(len(rotated_backups), 1)
+        finally:
+            CursorTranslate.CURSOR_INSTALL_PATH = original_path
+
+    def test_restore_removes_current_and_rotated_backups_by_default(self):
+        import CursorTranslate
+        original_path = CursorTranslate.CURSOR_INSTALL_PATH
+        try:
+            CursorTranslate.CURSOR_INSTALL_PATH = self.test_dir
+            backup_path = self.workbench_html_path + BACKUP_SUFFIX
+            product_backup_path = self.product_json_path + BACKUP_SUFFIX
+            rotated_workbench_backup = backup_path + '.20260101010101'
+            rotated_product_backup = product_backup_path + '.20260101010101'
+
+            with open(self.workbench_html_path, 'w', encoding='utf-8') as file:
+                file.write(f'<html><body>{INJECTION_MARKER}\n<script src="./{TRANSLATION_JS_NAME}"></script></body></html>')
+            with open(backup_path, 'w', encoding='utf-8') as file:
+                file.write('<html><body>original</body></html>')
+            with open(product_backup_path, 'w', encoding='utf-8') as file:
+                json.dump({"name": "Cursor", "backup": True}, file)
+            with open(rotated_workbench_backup, 'w', encoding='utf-8') as file:
+                file.write('rotated workbench backup')
+            with open(rotated_product_backup, 'w', encoding='utf-8') as file:
+                file.write('rotated product backup')
+
+            restore_original()
+
+            self.assertFalse(os.path.exists(backup_path))
+            self.assertFalse(os.path.exists(product_backup_path))
+            self.assertFalse(os.path.exists(rotated_workbench_backup))
+            self.assertFalse(os.path.exists(rotated_product_backup))
+        finally:
+            CursorTranslate.CURSOR_INSTALL_PATH = original_path
+
+    def test_restore_keep_backups_preserves_current_and_rotated_backups(self):
+        import CursorTranslate
+        original_path = CursorTranslate.CURSOR_INSTALL_PATH
+        try:
+            CursorTranslate.CURSOR_INSTALL_PATH = self.test_dir
+            backup_path = self.workbench_html_path + BACKUP_SUFFIX
+            product_backup_path = self.product_json_path + BACKUP_SUFFIX
+            rotated_workbench_backup = backup_path + '.20260101010101'
+            rotated_product_backup = product_backup_path + '.20260101010101'
+
+            with open(self.workbench_html_path, 'w', encoding='utf-8') as file:
+                file.write(f'<html><body>{INJECTION_MARKER}\n<script src="./{TRANSLATION_JS_NAME}"></script></body></html>')
+            with open(backup_path, 'w', encoding='utf-8') as file:
+                file.write('<html><body>original</body></html>')
+            with open(product_backup_path, 'w', encoding='utf-8') as file:
+                json.dump({"name": "Cursor", "backup": True}, file)
+            with open(rotated_workbench_backup, 'w', encoding='utf-8') as file:
+                file.write('rotated workbench backup')
+            with open(rotated_product_backup, 'w', encoding='utf-8') as file:
+                file.write('rotated product backup')
+
+            restore_original(keep_backups=True)
+
+            self.assertTrue(os.path.exists(backup_path))
+            self.assertTrue(os.path.exists(product_backup_path))
+            self.assertTrue(os.path.exists(rotated_workbench_backup))
+            self.assertTrue(os.path.exists(rotated_product_backup))
         finally:
             CursorTranslate.CURSOR_INSTALL_PATH = original_path
 

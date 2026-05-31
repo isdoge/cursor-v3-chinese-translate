@@ -663,13 +663,14 @@ def get_default_install_path_hint():
 
 def print_help():
     print("[用法] python CursorTranslate.py --apply [--cursorDir=\"路径\"]")
-    print("[用法] python CursorTranslate.py --restore [--cursorDir=\"路径\"]")
+    print("[用法] python CursorTranslate.py --restore [--cursorDir=\"路径\"] [--keep-backups]")
     print("[用法] python CursorTranslate.py --cleanup-legacy [--cursorDir=\"路径\"]")
     print("[用法] python CursorTranslate.py --extract-source-strings [--cursorDir=\"路径\"] [--limit=200]")
     print("[用法] python CursorTranslate.py --help")
     print(f"[默认] 当前平台默认安装目录: {get_default_install_path_hint()}")
     print("[说明] 不带任何参数时仅显示帮助信息，不执行任何操作")
     print("[说明] 如 Cursor 不在默认位置，可通过 --cursorDir 指定安装目录")
+    print("[说明] --restore 默认会清理本工具生成的当前和历史备份；如需保留备份，请同时使用 --keep-backups")
     print("[说明] --cleanup-legacy 清理早期版本遗留的语言包配置文件")
     print("[说明] --extract-source-strings 只读取源码并打印候选词条，不修改任何文件")
 
@@ -681,6 +682,7 @@ def parse_arguments():
     parser.add_argument('--extract-source-strings', action='store_true')
     parser.add_argument('--cleanup-legacy', action='store_true')
     parser.add_argument('--help', action='store_true')
+    parser.add_argument('--keep-backups', action='store_true')
     parser.add_argument('--cursorDir', dest='cursor_dir')
     parser.add_argument('--limit', type=int, default=200)
     args, unknown_args = parser.parse_known_args()
@@ -705,11 +707,16 @@ def parse_arguments():
         print_help()
         sys.exit(1)
 
+    if args.keep_backups and not args.restore:
+        print("\n[错误] --keep-backups 只能与 --restore 一起使用")
+        print_help()
+        sys.exit(1)
+
     if args.help or not selected_modes:
         print_help()
-        return None, args.cursor_dir, args.limit
+        return None, args.cursor_dir, args.limit, args.keep_backups
 
-    return selected_modes[0], args.cursor_dir, args.limit
+    return selected_modes[0], args.cursor_dir, args.limit, args.keep_backups
 
 
 def resolve_cursor_paths(custom_cursor_dir=None):
@@ -1246,14 +1253,40 @@ def update_checksum(refresh_existing_backup=False):
         return False
 
 
-def restore_checksum():
+def get_rotated_backup_paths(backup_path):
+    backup_dir = os.path.dirname(backup_path)
+    backup_name = os.path.basename(backup_path)
+    if not os.path.isdir(backup_dir):
+        return []
+
+    rotated_backup_pattern = re.compile(r'^' + re.escape(backup_name) + r'\.\d{14}(?:\.\d+)?$')
+    return [
+        os.path.join(backup_dir, file_name)
+        for file_name in os.listdir(backup_dir)
+        if rotated_backup_pattern.match(file_name)
+    ]
+
+
+def cleanup_rotated_backups(backup_paths):
+    for backup_path in backup_paths:
+        for rotated_backup_path in get_rotated_backup_paths(backup_path):
+            os.remove(rotated_backup_path)
+            print(f"[清理] 已删除历史备份: {rotated_backup_path}")
+
+
+def restore_checksum(keep_backups=False):
     """恢复 product.json 的原始校验值"""
     product_json_path = get_product_json_path()
     product_backup_path = get_product_backup_path()
     if os.path.exists(product_backup_path):
         shutil.copy2(product_backup_path, product_json_path)
-        os.remove(product_backup_path)
-        print(f"[校验] 已恢复 product.json 原始校验值")
+        if keep_backups:
+            print(f"[校验] 已从备份恢复 product.json，备份已保留: {product_backup_path}")
+        else:
+            os.remove(product_backup_path)
+            print(f"[校验] 已恢复 product.json 原始校验值")
+    elif not keep_backups:
+        cleanup_rotated_backups([product_backup_path])
 
 
 def remove_injected_script(html_content):
@@ -1301,7 +1334,7 @@ def remove_injected_script(html_content):
     return ''.join(updated_lines)
 
 
-def restore_original():
+def restore_original(keep_backups=False):
     """恢复原始的 workbench.html"""
     workbench_html_path = get_workbench_html_path()
     backup_path = get_workbench_backup_path()
@@ -1309,19 +1342,28 @@ def restore_original():
 
     if os.path.exists(backup_path):
         shutil.copy2(backup_path, workbench_html_path)
-        os.remove(backup_path)
-        print(f"[恢复] 已从备份恢复: {workbench_html_path}")
+        if keep_backups:
+            print(f"[恢复] 已从备份恢复: {workbench_html_path}，备份已保留: {backup_path}")
+        else:
+            os.remove(backup_path)
+            print(f"[恢复] 已从备份恢复: {workbench_html_path}")
     else:
         print("[恢复] 未找到备份文件，尝试手动移除注入...")
         html_content = read_text_file(workbench_html_path)
         write_text_file(workbench_html_path, remove_injected_script(html_content))
         print(f"[恢复] 已手动移除注入内容")
 
-    restore_checksum()
+    restore_checksum(keep_backups=keep_backups)
+
+    if not keep_backups:
+        cleanup_rotated_backups([backup_path, get_product_backup_path()])
 
     if os.path.exists(js_path):
         os.remove(js_path)
         print(f"[清理] 已删除脚本: {js_path}")
+
+    if keep_backups:
+        print("[备份] 已按 --keep-backups 保留当前和历史备份")
 
     print("[完成] 已恢复原始状态")
 
@@ -1334,7 +1376,7 @@ def main():
     print(f"  时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    mode, custom_cursor_dir, source_candidate_limit = parse_arguments()
+    mode, custom_cursor_dir, source_candidate_limit, keep_backups = parse_arguments()
     resolve_cursor_paths(custom_cursor_dir)
 
     if mode is None:
@@ -1356,7 +1398,7 @@ def main():
         print("\n[模式] 恢复原始文件...")
         if not check_write_permission():
             sys.exit(1)
-        restore_original()
+        restore_original(keep_backups=keep_backups)
         return
 
     print("\n[步骤 1/3] 读取翻译词典...")

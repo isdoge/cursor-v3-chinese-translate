@@ -9,7 +9,7 @@
 - 使用 `cursor_translate_dic.txt` 维护精确翻译词典，便于继续补充遗漏项。
 - 支持翻译文本节点以及 `title`、`aria-label`、`placeholder` 等属性。
 - 监听 DOM 动态变化，处理弹窗、菜单、设置项等后加载内容。
-- 自动备份并恢复 `workbench.html`、`product.json`。
+- 自动备份并恢复 `workbench.html`、`product.json`，恢复时默认清理本工具生成的备份文件。
 - 自动更新 `product.json` 校验值，降低“安装损坏”提示概率。
 
 ## 环境要求
@@ -57,10 +57,18 @@ python CursorTranslate.py
 python CursorTranslate.py --apply
 ```
 
-恢复原始文件：
+恢复原始文件并清理备份：
 
 ```bash
 python CursorTranslate.py --restore
+```
+
+`--restore` 默认会删除本工具生成的当前备份和历史轮转备份，例如 `workbench.html.bak`、`product.json.bak`、`workbench.html.bak.20260531123456`。
+
+如果需要保留备份文件，可以加上 `--keep-backups`：
+
+```bash
+python CursorTranslate.py --restore --keep-backups
 ```
 
 指定 Cursor 安装目录：
@@ -172,6 +180,12 @@ python CursorTranslate.py --apply
 ```bash
 python CursorTranslate.py --restore
 python CursorTranslate.py --apply
+```
+
+如果需要排查恢复前后的文件差异，可以在恢复时保留备份：
+
+```bash
+python CursorTranslate.py --restore --keep-backups
 ```
 
 ### 找不到 `workbench.html`
