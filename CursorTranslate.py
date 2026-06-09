@@ -81,6 +81,8 @@ MACOS_APP_RELATIVE_DIR = os.path.join("Contents", "Resources", "app")
 MACOS_CONTENTS_APP_RELATIVE_DIR = os.path.join("Resources", "app")
 WORKBENCH_RELATIVE_DIR = os.path.join("out", "vs", "code", "electron-sandbox", "workbench")
 WORKBENCH_SOURCE_RELATIVE_PATH = os.path.join("out", "vs", "workbench", "workbench.desktop.main.js")
+MAIN_PROCESS_RELATIVE_PATH = os.path.join("out", "main.js")
+NLS_MESSAGES_RELATIVE_PATH = os.path.join("out", "nls.messages.json")
 WORKBENCH_HTML_NAME = "workbench.html"
 TRANSLATION_JS_NAME = "cursor_hanhua.js"
 TRANSLATION_DICTIONARY_NAME = "cursor_translate_dic.txt"
@@ -90,6 +92,27 @@ TOOL_VERSION = "1.0.0"
 TOOL_MARKER = "CursorTranslate.py"
 
 CHECKSUM_KEY = "vs/code/electron-sandbox/workbench/workbench.html"
+
+NATIVE_MENU_TRANSLATION_KEYS = (
+    "Search",
+    "Undo",
+    "Redo",
+    "Cut",
+    "Copy",
+    "Paste",
+    "Select All",
+    "Recent Agents",
+    "Clear All Notifications",
+    "New Agent",
+    "Open Cursor",
+    "Settings",
+    "Preferences",
+    "Quit",
+    "Running",
+    "Chat name generation instructions",
+    "Done • Chat name generation instructions",
+    "Open Cursor to view the agent's output.",
+)
 
 SOURCE_EXTRACTION_CONTEXT_KEYWORDS = (
     "composer",
@@ -264,6 +287,7 @@ def generate_js_code(translation_dictionary_data):
         [/^(\\d+) tools?$/i, "$1 个工具"],
         [/^(\\d+) resources?$/i, "$1 个资源"],
         [/^(\\d+) prompts?$/i, "$1 个提示词"],
+        [/^New Agent in (.+)$/i, "在 $1 中新建智能体"],
         [/^Updated (.+) ago$/i, "$1前更新"],
         [/^(\\d+) seconds? ago$/i, "$1 秒前"],
         [/^(\\d+) minutes? ago$/i, "$1 分钟前"],
@@ -285,8 +309,10 @@ def generate_js_code(translation_dictionary_data):
         [/^(.*?\\S)\\s+to Send$/i, "$1 发送"],
         [/^Thought briefly$/i, "短暂思考"],
         [/^Thought for ([\\d.]+)s$/i, "思考耗时 $1 秒"],
+        [/^Worked for ([\\d.]+)s$/i, "工作耗时 $1 秒"],
         [/^for ([\\d.]+)s$/i, "耗时 $1 秒"],
         [/^([\\d.]+)s$/i, "$1 秒"],
+        [/^Done • (.+)$/i, "已完成 • $1"],
         [/^Completed (\\d+) of (\\d+)$/i, "已完成 $1 / $2"],
         [/^Completed (\\d+) of (\\d+) to-dos$/i, "已完成 $1 / $2 个待办"],
         [/^Started (\\d+) to-dos$/i, "已开始 $1 个待办"],
@@ -297,13 +323,63 @@ def generate_js_code(translation_dictionary_data):
     ];
 
     const editorAreaSelector = '.monaco-editor, .overflow-guard, .view-lines, .editor-scrollable, .inputarea, .rename-input';
+    const translatableOverlaySelector = '.context-view, .monaco-menu, .monaco-menu-container, .actions-container, .quick-input-widget, .monaco-action-bar, .action-menu-item, [role="menu"], [role="menuitem"]';
     const skippedTags = new Set(['TEXTAREA', 'INPUT', 'SCRIPT', 'STYLE', 'CODE', 'PRE', 'NOSCRIPT']);
     const pendingNodes = [];
     let rescanCount = 0;
     let isTranslationScheduled = false;
+    let overlayRescanTimer = null;
+    const debugEndpoint = 'http://127.0.0.1:7877/ingest/24f45be6-dc70-493c-9529-bff069145032';
+    const debugSessionId = '4ae5b2';
+    const debugSeenEvents = new Set();
+    const debugTargetTextPattern = /(ask mode|read-only agents|research your codebase|shift\+?tab|get started|uses read-only|plan, build|find-skills|for skills|for context|chat name generation|new agent|failed to load changes|summarizing chat context|chat context summarized|worked for|used review|open cursor to view|done •|briefly|cut|copy|paste|select all|询问|规划|智能体|模式|加载更改失败|正在总结聊天上下文|聊天上下文已总结|工作耗时|使用了 review|打开 Cursor|已完成|片刻|剪切|复制|粘贴|全选)/i;
+
+    function debugSafeText(text) {
+        return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+    }
+
+    function debugShouldInspect(text) {
+        return debugTargetTextPattern.test(debugSafeText(text));
+    }
+
+    function debugElementFingerprint(element) {
+        if (!element) return null;
+        return {
+            tagName: element.tagName || '',
+            className: debugSafeText(element.className || ''),
+            role: element.getAttribute ? debugSafeText(element.getAttribute('role') || '') : '',
+            ariaLabel: element.getAttribute ? debugSafeText(element.getAttribute('aria-label') || '') : '',
+            placeholder: element.getAttribute ? debugSafeText(element.getAttribute('placeholder') || '') : '',
+            dataPlaceholder: element.getAttribute ? debugSafeText(element.getAttribute('data-placeholder') || '') : '',
+            contentEditable: element.getAttribute ? debugSafeText(element.getAttribute('contenteditable') || '') : ''
+        };
+    }
+
+    function debugLogOnce(hypothesisId, location, message, data) {
+        const safeData = data || {};
+        const eventKey = hypothesisId + '|' + location + '|' + message + '|' + JSON.stringify(safeData).slice(0, 400);
+        if (debugSeenEvents.has(eventKey)) return;
+        debugSeenEvents.add(eventKey);
+        // #region debug log
+        fetch(debugEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':debugSessionId},body:JSON.stringify({sessionId:debugSessionId,location:location,message:message,data:{hypothesisId:hypothesisId,...safeData},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+    }
+
+    debugLogOnce('H6', 'CursorTranslate.py:startup', 'Translation script loaded', {
+        dictionarySize: translationDictionary.size,
+        bodyReady: Boolean(document.body)
+    });
 
     function normalizeTranslationWhitespace(text) {
         return text.replace(/\\s+/g, ' ').trim();
+    }
+
+    function isInTranslatableOverlay(element) {
+        try {
+            return Boolean(element && element.closest && element.closest(translatableOverlaySelector));
+        } catch (error) {
+            return false;
+        }
     }
 
     function lookupTranslation(text) {
@@ -316,7 +392,39 @@ def generate_js_code(translation_dictionary_data):
             return normalizedTranslationDictionary.get(normalizedText);
         }
 
+        if (debugShouldInspect(text)) {
+            debugLogOnce('H1', 'CursorTranslate.py:lookupTranslation', 'No dictionary entry matched target UI text', {
+                text: debugSafeText(text),
+                normalizedText: debugSafeText(normalizedText),
+                exactKnown: translationDictionary.has(text),
+                normalizedKnown: normalizedTranslationDictionary.has(normalizedText)
+            });
+        }
+
         return null;
+    }
+
+    function translatePlainText(text) {
+        if (typeof text !== 'string' || !text) return text;
+
+        const trimmedText = text.trim();
+        if (!trimmedText) return text;
+
+        let translatedText = lookupTranslation(trimmedText);
+        if (translatedText === null) {
+            for (const [pattern, replacement] of translationPatterns) {
+                if (pattern.test(trimmedText)) {
+                    translatedText = trimmedText.replace(pattern, replacement);
+                    break;
+                }
+            }
+        }
+
+        if (translatedText === null) return text;
+
+        const startIndex = text.indexOf(trimmedText);
+        if (startIndex === -1) return translatedText;
+        return text.substring(0, startIndex) + translatedText + text.substring(startIndex + trimmedText.length);
     }
 
     function translateAgentSummaryPart(part) {
@@ -380,7 +488,7 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function translateSplitSettingDescription(element) {
-        if (!element || !element.textContent || element.closest(editorAreaSelector)) return false;
+        if (!element || !element.textContent || (element.closest(editorAreaSelector) && !isInTranslatableOverlay(element))) return false;
         if (element.childNodes.length === 0 || element.childNodes.length > 12) return false;
 
         const normalizedText = normalizeTranslationWhitespace(element.textContent);
@@ -406,6 +514,12 @@ def generate_js_code(translation_dictionary_data):
             const prefix = text.substring(0, text.indexOf(trimmedText));
             const suffix = text.substring(text.indexOf(trimmedText) + trimmedText.length);
             node.textContent = prefix + translatedText + suffix;
+            if (debugShouldInspect(trimmedText)) {
+                debugLogOnce('H5', 'CursorTranslate.py:translateTextNode:dictionary-hit', 'Target text node translated by dictionary', {
+                    sourceText: debugSafeText(trimmedText),
+                    translatedText: debugSafeText(translatedText)
+                });
+            }
             return;
         }
 
@@ -424,6 +538,12 @@ def generate_js_code(translation_dictionary_data):
         for (const [pattern, replacement] of translationPatterns) {
             if (pattern.test(trimmedText)) {
                 node.textContent = text.replace(trimmedText, trimmedText.replace(pattern, replacement));
+                if (debugShouldInspect(trimmedText)) {
+                    debugLogOnce('H5', 'CursorTranslate.py:translateTextNode:pattern-hit', 'Target text node translated by pattern', {
+                        sourceText: debugSafeText(trimmedText),
+                        replacement: debugSafeText(replacement)
+                    });
+                }
                 return;
             }
         }
@@ -431,7 +551,7 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function translateAttributes(element) {
-        for (const attributeName of ['title', 'aria-label', 'placeholder', 'aria-description', 'data-tooltip', 'data-title']) {
+        for (const attributeName of ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description', 'data-placeholder', 'data-lexical-placeholder', 'data-tooltip', 'data-title']) {
             const attributeValue = element.getAttribute(attributeName);
             if (!attributeValue) continue;
 
@@ -439,6 +559,20 @@ def generate_js_code(translation_dictionary_data):
             const translatedValue = lookupTranslation(trimmedValue);
             if (translatedValue !== null) {
                 element.setAttribute(attributeName, translatedValue);
+                if (debugShouldInspect(trimmedValue)) {
+                    debugLogOnce('H5', 'CursorTranslate.py:translateAttributes:dictionary-hit', 'Target attribute translated by dictionary', {
+                        attributeName: attributeName,
+                        sourceText: debugSafeText(trimmedValue),
+                        translatedText: debugSafeText(translatedValue),
+                        element: debugElementFingerprint(element)
+                    });
+                }
+            } else if (debugShouldInspect(trimmedValue)) {
+                debugLogOnce('H4', 'CursorTranslate.py:translateAttributes:miss', 'Target attribute had no dictionary match', {
+                    attributeName: attributeName,
+                    attributeValue: debugSafeText(trimmedValue),
+                    element: debugElementFingerprint(element)
+                });
             }
         }
     }
@@ -455,17 +589,45 @@ def generate_js_code(translation_dictionary_data):
 
     function translateElementOwnText(element) {
         if (!element || !element.childNodes || element.childNodes.length === 0) return;
-        if (element.closest(editorAreaSelector)) return;
+        if (element.closest(editorAreaSelector) && !isInTranslatableOverlay(element)) return;
 
         const ownText = getElementOwnText(element);
         const trimmedText = ownText.trim();
-        if (!trimmedText || trimmedText.length > 120) return;
+        if (!trimmedText || trimmedText.length > 120) {
+            if (debugShouldInspect(element.textContent || ownText)) {
+                debugLogOnce('H3', 'CursorTranslate.py:translateElementOwnText:skip', 'Target element own-text translation skipped', {
+                    reason: !trimmedText ? 'empty-own-text' : 'own-text-too-long',
+                    ownText: debugSafeText(ownText),
+                    combinedText: debugSafeText(element.textContent || ''),
+                    childNodeCount: element.childNodes.length,
+                    element: debugElementFingerprint(element)
+                });
+            }
+            return;
+        }
         const translatedText = lookupTranslation(trimmedText);
-        if (translatedText === null) return;
+        if (translatedText === null) {
+            if (debugShouldInspect(element.textContent || trimmedText)) {
+                debugLogOnce('H3', 'CursorTranslate.py:translateElementOwnText:miss', 'Target element own text had no dictionary match', {
+                    ownText: debugSafeText(ownText),
+                    combinedText: debugSafeText(element.textContent || ''),
+                    childNodeCount: element.childNodes.length,
+                    element: debugElementFingerprint(element)
+                });
+            }
+            return;
+        }
 
         for (const childNode of element.childNodes) {
             if (childNode.nodeType === Node.TEXT_NODE && childNode.textContent.includes(trimmedText)) {
                 childNode.textContent = childNode.textContent.replace(trimmedText, translatedText);
+                if (debugShouldInspect(trimmedText)) {
+                    debugLogOnce('H5', 'CursorTranslate.py:translateElementOwnText:dictionary-hit', 'Target element own text translated by dictionary', {
+                        sourceText: debugSafeText(trimmedText),
+                        translatedText: debugSafeText(translatedText),
+                        element: debugElementFingerprint(element)
+                    });
+                }
                 return;
             }
         }
@@ -474,9 +636,30 @@ def generate_js_code(translation_dictionary_data):
     function shouldSkipNode(node) {
         const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
         if (!element) return true;
-        if (skippedTags.has(element.tagName)) return true;
+        if (skippedTags.has(element.tagName)) {
+            const debugText = node.nodeType === Node.TEXT_NODE ? node.textContent : element.textContent;
+            if (debugShouldInspect(debugText)) {
+                debugLogOnce('H2', 'CursorTranslate.py:shouldSkipNode:tag', 'Target node skipped because of tag', {
+                    text: debugSafeText(debugText),
+                    skippedTag: element.tagName,
+                    element: debugElementFingerprint(element)
+                });
+            }
+            return true;
+        }
         try {
-            if (element.closest(editorAreaSelector)) return true;
+            const editorAreaElement = element.closest(editorAreaSelector);
+            if (editorAreaElement && !isInTranslatableOverlay(element)) {
+                const debugText = node.nodeType === Node.TEXT_NODE ? node.textContent : element.textContent;
+                if (debugShouldInspect(debugText)) {
+                    debugLogOnce('H2', 'CursorTranslate.py:shouldSkipNode:editor-area', 'Target node skipped because it is inside editor area', {
+                        text: debugSafeText(debugText),
+                        element: debugElementFingerprint(element),
+                        editorAreaElement: debugElementFingerprint(editorAreaElement)
+                    });
+                }
+                return true;
+            }
         } catch (error) {}
         return false;
     }
@@ -490,8 +673,19 @@ def generate_js_code(translation_dictionary_data):
                     translateAttributes(node);
                     continue;
                 }
-                if (node.classList && (node.classList.contains('monaco-editor') || node.classList.contains('overflow-guard') || node.classList.contains('view-lines') || node.classList.contains('editor-scrollable'))) continue;
-                if (node.getAttribute('contenteditable') === 'true') continue;
+                if (node.classList && !isInTranslatableOverlay(node) && (node.classList.contains('monaco-editor') || node.classList.contains('overflow-guard') || node.classList.contains('view-lines') || node.classList.contains('editor-scrollable'))) continue;
+                if (node.getAttribute('contenteditable') === 'true') {
+                    translateAttributes(node);
+                    const debugCombinedText = [node.textContent, node.getAttribute('placeholder'), node.getAttribute('data-placeholder'), node.getAttribute('aria-label')].filter(Boolean).join(' ');
+                    if (debugShouldInspect(debugCombinedText)) {
+                        debugLogOnce('H2', 'CursorTranslate.py:translateTree:contenteditable-skip', 'Target element skipped because it is contenteditable', {
+                            combinedText: debugSafeText(debugCombinedText),
+                            childNodeCount: node.childNodes.length,
+                            element: debugElementFingerprint(node)
+                        });
+                    }
+                    continue;
+                }
 
                 if (translateSplitSettingDescription(node)) continue;
                 translateAttributes(node);
@@ -529,6 +723,33 @@ def generate_js_code(translation_dictionary_data):
         } catch (error) {}
     }
 
+    function rescanTranslatableOverlays() {
+        try {
+            const overlayElements = document.querySelectorAll(translatableOverlaySelector);
+            for (const overlayElement of overlayElements) {
+                translateTree(overlayElement);
+            }
+        } catch (error) {}
+    }
+
+    function scheduleOverlayRescans() {
+        if (overlayRescanTimer !== null) {
+            clearInterval(overlayRescanTimer);
+            overlayRescanTimer = null;
+        }
+
+        let overlayRescanCount = 0;
+        rescanTranslatableOverlays();
+        overlayRescanTimer = setInterval(function () {
+            overlayRescanCount += 1;
+            rescanTranslatableOverlays();
+            if (overlayRescanCount >= 60) {
+                clearInterval(overlayRescanTimer);
+                overlayRescanTimer = null;
+            }
+        }, 50);
+    }
+
     function scheduleStartupRescans() {
         const delays = [300, 800, 1500, 3000, 6000, 10000];
         for (const delay of delays) {
@@ -550,22 +771,83 @@ def generate_js_code(translation_dictionary_data):
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) {
                         enqueueNode(node);
+                        if (isInTranslatableOverlay(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)) {
+                            scheduleOverlayRescans();
+                        }
                     }
                 }
             } else if (mutation.type === 'characterData' && mutation.target.nodeType === Node.TEXT_NODE) {
                 enqueueNode(mutation.target);
+                if (isInTranslatableOverlay(mutation.target.parentElement)) {
+                    scheduleOverlayRescans();
+                }
+            } else if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
+                enqueueNode(mutation.target);
+                if (isInTranslatableOverlay(mutation.target)) {
+                    scheduleOverlayRescans();
+                }
             }
         }
     }
 
+    function installNotificationTranslator() {
+        try {
+            const NativeNotification = window.Notification;
+            if (typeof NativeNotification !== 'function' || NativeNotification.__cursorHanhuaWrapped) return;
+
+            function TranslatedNotification(title, options) {
+                const originalTitle = typeof title === 'string' ? title : String(title || '');
+                const originalBody = options && typeof options.body === 'string' ? options.body : '';
+                const translatedTitle = translatePlainText(originalTitle);
+                let translatedOptions = options;
+
+                if (options && typeof options === 'object') {
+                    translatedOptions = { ...options };
+                    if (typeof translatedOptions.body === 'string') {
+                        translatedOptions.body = translatePlainText(translatedOptions.body);
+                    }
+                }
+
+                if (debugShouldInspect(originalTitle + ' ' + originalBody)) {
+                    debugLogOnce('H7', 'CursorTranslate.py:Notification', 'System notification text translated', {
+                        sourceTitle: debugSafeText(originalTitle),
+                        translatedTitle: debugSafeText(translatedTitle),
+                        sourceBody: debugSafeText(originalBody),
+                        translatedBody: debugSafeText(translatedOptions && translatedOptions.body)
+                    });
+                }
+
+                return new NativeNotification(translatedTitle, translatedOptions);
+            }
+
+            TranslatedNotification.prototype = NativeNotification.prototype;
+            Object.setPrototypeOf(TranslatedNotification, NativeNotification);
+            Object.defineProperty(TranslatedNotification, '__cursorHanhuaWrapped', { value: true });
+            Object.defineProperty(window, 'Notification', {
+                configurable: true,
+                writable: true,
+                value: TranslatedNotification
+            });
+        } catch (error) {}
+    }
+
+    installNotificationTranslator();
     translateTree(document.body);
     scheduleStartupRescans();
+
+    document.addEventListener('contextmenu', function () {
+        scheduleOverlayRescans();
+        setTimeout(scheduleOverlayRescans, 80);
+        setTimeout(scheduleOverlayRescans, 250);
+    }, true);
 
     const observer = new MutationObserver(handleMutations);
     observer.observe(document.body, {
         childList: true,
         subtree: true,
-        characterData: true
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description', 'data-placeholder', 'data-lexical-placeholder', 'data-tooltip', 'data-title']
     });
 })();
 '''
@@ -617,6 +899,16 @@ def get_workbench_source_path():
     return os.path.join(get_cursor_app_path(), WORKBENCH_SOURCE_RELATIVE_PATH)
 
 
+def get_main_process_path():
+    """获取 Cursor 主进程打包源码路径。"""
+    return os.path.join(get_cursor_app_path(), MAIN_PROCESS_RELATIVE_PATH)
+
+
+def get_nls_messages_path():
+    """获取 Cursor 本地化消息资源路径。"""
+    return os.path.join(get_cursor_app_path(), NLS_MESSAGES_RELATIVE_PATH)
+
+
 def get_cursor_skills_dirs():
     """获取可能存在的 Cursor 内置技能目录路径"""
     candidate_dirs = [
@@ -649,6 +941,24 @@ def get_product_json_path():
 def get_product_backup_path():
     """获取 product.json 备份路径"""
     return get_product_json_path() + BACKUP_SUFFIX
+
+
+def get_main_process_backup_path():
+    """获取 main.js 备份路径。"""
+    return get_main_process_path() + BACKUP_SUFFIX
+
+
+def get_nls_messages_backup_path():
+    """获取 nls.messages.json 备份路径。"""
+    return get_nls_messages_path() + BACKUP_SUFFIX
+
+
+def get_native_resource_paths():
+    """获取需要额外处理的原生菜单/通知资源文件。"""
+    return [
+        ("main.js", get_main_process_path(), get_main_process_backup_path()),
+        ("nls.messages.json", get_nls_messages_path(), get_nls_messages_backup_path()),
+    ]
 
 
 def get_default_install_path_hint():
@@ -732,6 +1042,11 @@ def check_write_permission():
         ("workbench 目录", get_workbench_dir()),
         ("product.json 目录", os.path.dirname(get_product_json_path())),
     ]
+
+    for label, resource_path, _backup_path in get_native_resource_paths():
+        resource_dir = os.path.dirname(resource_path)
+        if os.path.exists(resource_path) or os.path.isdir(resource_dir):
+            paths_to_check.append((f"{label} 目录", resource_dir))
 
     checked_dirs = set()
     for label, directory_path in paths_to_check:
@@ -1135,6 +1450,114 @@ def write_translation_js(translation_dictionary_data):
     print(f"[写入] 脚本已写入: {js_path}")
 
 
+def get_native_resource_translations(translation_dictionary_data):
+    """获取需要写入 Electron 原生菜单/通知资源的翻译。"""
+    return {
+        source_text: translation_dictionary_data[source_text]
+        for source_text in NATIVE_MENU_TRANSLATION_KEYS
+        if source_text in translation_dictionary_data
+    }
+
+
+def replace_native_resource_text(content, native_translations):
+    """替换打包资源中的字符串字面量，避免误改业务代码标识。"""
+    updated_content = content
+    replacement_counts = {}
+
+    for source_text, translated_text in native_translations.items():
+        if source_text == translated_text:
+            continue
+
+        count = 0
+        source_literals = {
+            json.dumps(source_text, ensure_ascii=False),
+            json.dumps(source_text, ensure_ascii=True),
+        }
+        translated_literal = json.dumps(translated_text, ensure_ascii=False)
+
+        for source_literal in source_literals:
+            literal_count = updated_content.count(source_literal)
+            if literal_count == 0:
+                continue
+            updated_content = updated_content.replace(source_literal, translated_literal)
+            count += literal_count
+
+        if count > 0:
+            replacement_counts[source_text] = count
+
+    return updated_content, replacement_counts
+
+
+def should_refresh_native_backup(resource_path, backup_path, native_translations):
+    """判断原生资源备份是否应随 Cursor 更新而刷新。"""
+    if not os.path.exists(backup_path):
+        return True
+
+    try:
+        content = read_text_file(resource_path)
+    except Exception:
+        return False
+
+    translated_literals = [
+        json.dumps(translated_text, ensure_ascii=False)
+        for translated_text in native_translations.values()
+    ]
+    # 如果当前文件已包含汉化后的原生字符串，说明它可能是已打补丁状态，
+    # 此时必须保留旧备份，避免把“已汉化文件”覆盖成新的备份。
+    return not any(translated_literal in content for translated_literal in translated_literals)
+
+
+def apply_native_resource_translations(translation_dictionary_data):
+    """翻译 Electron 主进程/本地化资源中的原生菜单与通知文本。"""
+    native_translations = get_native_resource_translations(translation_dictionary_data)
+    if not native_translations:
+        print("[原生] 未找到可用的原生菜单翻译词条，已跳过")
+        return
+
+    patched_files = 0
+    total_replacements = 0
+
+    for label, resource_path, backup_path in get_native_resource_paths():
+        if not os.path.exists(resource_path):
+            print(f"[原生] 未找到 {label}，已跳过: {resource_path}")
+            continue
+
+        original_content = read_text_file(resource_path)
+        updated_content, replacement_counts = replace_native_resource_text(original_content, native_translations)
+        if updated_content == original_content:
+            print(f"[原生] {label} 未发现需要替换的原生菜单文本")
+            continue
+
+        refresh_backup = should_refresh_native_backup(resource_path, backup_path, native_translations)
+        prepare_backup_file(resource_path, backup_path, label, refresh_existing=refresh_backup)
+        write_text_file(resource_path, updated_content)
+
+        replacement_total = sum(replacement_counts.values())
+        patched_files += 1
+        total_replacements += replacement_total
+        translated_keys = "、".join(replacement_counts.keys())
+        print(f"[原生] 已更新 {label}: {replacement_total} 处（{translated_keys}）")
+
+    if patched_files == 0:
+        print("[原生] 未修改原生资源；如果任务栏右键仍是英文，可能需要继续定位新的资源文件")
+    else:
+        print(f"[原生] 已更新 {patched_files} 个资源文件，共 {total_replacements} 处；重启 Cursor 后任务栏/托盘菜单生效")
+
+
+def restore_native_resources(keep_backups=False):
+    """恢复 Electron 原生菜单/通知资源。"""
+    for label, resource_path, backup_path in get_native_resource_paths():
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, resource_path)
+            if keep_backups:
+                print(f"[原生] 已从备份恢复 {label}，备份已保留: {backup_path}")
+            else:
+                os.remove(backup_path)
+                print(f"[原生] 已恢复 {label}: {resource_path}")
+        elif not keep_backups:
+            cleanup_rotated_backups([backup_path])
+
+
 def insert_injection_code(html_content, injected_code):
     body_close_index = html_content.rfind('</body>')
     if body_close_index != -1:
@@ -1354,9 +1777,14 @@ def restore_original(keep_backups=False):
         print(f"[恢复] 已手动移除注入内容")
 
     restore_checksum(keep_backups=keep_backups)
+    restore_native_resources(keep_backups=keep_backups)
 
     if not keep_backups:
-        cleanup_rotated_backups([backup_path, get_product_backup_path()])
+        cleanup_rotated_backups([
+            backup_path,
+            get_product_backup_path(),
+            *[native_backup_path for _label, _resource_path, native_backup_path in get_native_resource_paths()],
+        ])
 
     if os.path.exists(js_path):
         os.remove(js_path)
@@ -1421,6 +1849,7 @@ def main():
         if not update_checksum():
             print("[错误] 脚本更新成功但校验和更新失败")
             sys.exit(1)
+        apply_native_resource_translations(translation_dictionary_data)
         print("\n[完成] 脚本已更新！重启 Cursor 生效。")
         return
 
@@ -1440,6 +1869,7 @@ def main():
 
     print("[步骤 3/3] 注入 HTML 引用...")
     inject_into_html()
+    apply_native_resource_translations(translation_dictionary_data)
 
     print("\n" + "=" * 60)
     print("  [完成] Cursor 汉化注入成功！")
