@@ -1,6 +1,6 @@
 "General" => "通用"
 "Agents" => "智能体"
-"Tab" => "代码补全"
+// "Tab" => "代码补全"
 "Cloud Agents" => "云端智能体"
 "Plugins" => "插件"
 "Rules, Skills, Subagents" => "规则、技能、子智能体"
@@ -23,7 +23,7 @@
 "Logout" => "退出登录"
 "Manage Subscription" => "管理订阅"
 "Manage Account" => "管理账户"
-"Manage" => "管理"
+// "Manage" => "管理"
 "Manage your account and billing" => "管理您的账户和账单"
 "Plan & Usage" => "计划与用量"
 "Upgrade" => "升级"
@@ -171,6 +171,9 @@
 "Suggest the next prompt for Agent" => "为 Agent 建议下一个提示"
 "Contextual suggestions while prompting Agent" => "在提示 Agent 时提供上下文建议"
 "Agent Autocomplete" => "Agent 自动补全"
+"Taking longer than expected" => "耗时比预期更长"
+"Taking longer than expected..." => "耗时比预期更长..."
+"Taking longer than expected…" => "耗时比预期更长..."
 
 ########################## Agent: Auto-Run（自动运行）模块
 "Auto-Run" => "自动运行"
@@ -196,8 +199,8 @@
 "Mode transitions that will be automatically approved without prompting." => "无需提示即可自动批准的智能体模式切换。"
 "Always ask" => "始终询问"
 "Always run" => "始终运行"
-"Skip" => "跳过"
-"Switch" => "切换"
+// "Skip" => "跳过"
+// "Switch" => "切换"
 
 "Browser Protection" => "浏览器保护"
 "Prevent Agent from automatically running Browser tools" => "禁止智能体自动运行浏览器工具"

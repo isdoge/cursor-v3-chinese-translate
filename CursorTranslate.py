@@ -95,12 +95,6 @@ CHECKSUM_KEY = "vs/code/electron-sandbox/workbench/workbench.html"
 
 NATIVE_MENU_TRANSLATION_KEYS = (
     "Search",
-    "Undo",
-    "Redo",
-    "Cut",
-    "Copy",
-    "Paste",
-    "Select All",
     "Recent Agents",
     "Clear All Notifications",
     "New Agent",
@@ -112,6 +106,27 @@ NATIVE_MENU_TRANSLATION_KEYS = (
     "Chat name generation instructions",
     "Done • Chat name generation instructions",
     "Open Cursor to view the agent's output.",
+    "File",
+    "Edit",
+    "View",
+    "Help",
+    "Undo",
+    "Redo",
+    "Cut",
+    "Copy",
+    "Paste",
+    "Select All",
+    "Open Folder",
+    "New Terminal",
+    "New Browser",
+    "Open Editor Window",
+    "Exit",
+    "Command Palette",
+    "Open Changes",
+    "Open Browser",
+    "Open File",
+    "Open Terminal",
+    "View License",
 )
 
 SOURCE_EXTRACTION_CONTEXT_KEYWORDS = (
@@ -322,64 +337,30 @@ def generate_js_code(translation_dictionary_data):
         [/^Monitored background (task|tasks)$/i, "已监控后台任务"]
     ];
 
-    const editorAreaSelector = '.monaco-editor, .overflow-guard, .view-lines, .editor-scrollable, .inputarea, .rename-input';
-    const translatableOverlaySelector = '.context-view, .monaco-menu, .monaco-menu-container, .actions-container, .quick-input-widget, .monaco-action-bar, .action-menu-item, [role="menu"], [role="menuitem"]';
-    const skippedTags = new Set(['TEXTAREA', 'INPUT', 'SCRIPT', 'STYLE', 'CODE', 'PRE', 'NOSCRIPT']);
-    const pendingNodes = [];
-    let rescanCount = 0;
+    const editorAreaSelector = '.monaco-editor, .overflow-guard, .view-lines, .editor-scrollable, .inputarea, .rename-input, .xterm, .terminal, .terminal-wrapper, .monaco-diff-editor, .diffOverview, .webview, webview, iframe';
+    const skippedTags = new Set(['TEXTAREA', 'INPUT', 'SCRIPT', 'STYLE', 'CODE', 'PRE', 'NOSCRIPT', 'CANVAS', 'SVG', 'IFRAME', 'WEBVIEW']);
+    const pendingNodes = new Set();
+    const maxPendingNodes = 500;
+    const maxNodesPerFrame = 120;
     let isTranslationScheduled = false;
-    let overlayRescanTimer = null;
-    const debugEndpoint = 'http://127.0.0.1:7877/ingest/24f45be6-dc70-493c-9529-bff069145032';
-    const debugSessionId = '4ae5b2';
-    const debugSeenEvents = new Set();
-    const debugTargetTextPattern = /(ask mode|read-only agents|research your codebase|shift\+?tab|get started|uses read-only|plan, build|find-skills|for skills|for context|chat name generation|new agent|failed to load changes|summarizing chat context|chat context summarized|worked for|used review|open cursor to view|done •|briefly|cut|copy|paste|select all|询问|规划|智能体|模式|加载更改失败|正在总结聊天上下文|聊天上下文已总结|工作耗时|使用了 review|打开 Cursor|已完成|片刻|剪切|复制|粘贴|全选)/i;
+
+    function debugShouldInspect(_text) {
+        return false;
+    }
 
     function debugSafeText(text) {
-        return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+        return String(text || '').replace(/\\s+/g, ' ').trim().slice(0, 220);
     }
 
-    function debugShouldInspect(text) {
-        return debugTargetTextPattern.test(debugSafeText(text));
+    function debugElementFingerprint(_element) {
+        return null;
     }
 
-    function debugElementFingerprint(element) {
-        if (!element) return null;
-        return {
-            tagName: element.tagName || '',
-            className: debugSafeText(element.className || ''),
-            role: element.getAttribute ? debugSafeText(element.getAttribute('role') || '') : '',
-            ariaLabel: element.getAttribute ? debugSafeText(element.getAttribute('aria-label') || '') : '',
-            placeholder: element.getAttribute ? debugSafeText(element.getAttribute('placeholder') || '') : '',
-            dataPlaceholder: element.getAttribute ? debugSafeText(element.getAttribute('data-placeholder') || '') : '',
-            contentEditable: element.getAttribute ? debugSafeText(element.getAttribute('contenteditable') || '') : ''
-        };
+    function debugLogOnce(_hypothesisId, _location, _message, _data) {
     }
-
-    function debugLogOnce(hypothesisId, location, message, data) {
-        const safeData = data || {};
-        const eventKey = hypothesisId + '|' + location + '|' + message + '|' + JSON.stringify(safeData).slice(0, 400);
-        if (debugSeenEvents.has(eventKey)) return;
-        debugSeenEvents.add(eventKey);
-        // #region debug log
-        fetch(debugEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':debugSessionId},body:JSON.stringify({sessionId:debugSessionId,location:location,message:message,data:{hypothesisId:hypothesisId,...safeData},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-    }
-
-    debugLogOnce('H6', 'CursorTranslate.py:startup', 'Translation script loaded', {
-        dictionarySize: translationDictionary.size,
-        bodyReady: Boolean(document.body)
-    });
 
     function normalizeTranslationWhitespace(text) {
         return text.replace(/\\s+/g, ' ').trim();
-    }
-
-    function isInTranslatableOverlay(element) {
-        try {
-            return Boolean(element && element.closest && element.closest(translatableOverlaySelector));
-        } catch (error) {
-            return false;
-        }
     }
 
     function lookupTranslation(text) {
@@ -488,7 +469,7 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function translateSplitSettingDescription(element) {
-        if (!element || !element.textContent || (element.closest(editorAreaSelector) && !isInTranslatableOverlay(element))) return false;
+        if (!element || !element.textContent || element.closest(editorAreaSelector)) return false;
         if (element.childNodes.length === 0 || element.childNodes.length > 12) return false;
 
         const normalizedText = normalizeTranslationWhitespace(element.textContent);
@@ -551,7 +532,7 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function translateAttributes(element) {
-        for (const attributeName of ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description', 'data-placeholder', 'data-lexical-placeholder', 'data-tooltip', 'data-title']) {
+        for (const attributeName of ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description']) {
             const attributeValue = element.getAttribute(attributeName);
             if (!attributeValue) continue;
 
@@ -589,7 +570,7 @@ def generate_js_code(translation_dictionary_data):
 
     function translateElementOwnText(element) {
         if (!element || !element.childNodes || element.childNodes.length === 0) return;
-        if (element.closest(editorAreaSelector) && !isInTranslatableOverlay(element)) return;
+        if (element.closest(editorAreaSelector)) return;
 
         const ownText = getElementOwnText(element);
         const trimmedText = ownText.trim();
@@ -649,7 +630,7 @@ def generate_js_code(translation_dictionary_data):
         }
         try {
             const editorAreaElement = element.closest(editorAreaSelector);
-            if (editorAreaElement && !isInTranslatableOverlay(element)) {
+            if (editorAreaElement) {
                 const debugText = node.nodeType === Node.TEXT_NODE ? node.textContent : element.textContent;
                 if (debugShouldInspect(debugText)) {
                     debugLogOnce('H2', 'CursorTranslate.py:shouldSkipNode:editor-area', 'Target node skipped because it is inside editor area', {
@@ -665,6 +646,7 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function translateTree(root) {
+        if (!root) return;
         const stack = [root];
         while (stack.length > 0) {
             const node = stack.pop();
@@ -673,10 +655,10 @@ def generate_js_code(translation_dictionary_data):
                     translateAttributes(node);
                     continue;
                 }
-                if (node.classList && !isInTranslatableOverlay(node) && (node.classList.contains('monaco-editor') || node.classList.contains('overflow-guard') || node.classList.contains('view-lines') || node.classList.contains('editor-scrollable'))) continue;
+                if (node.classList && (node.classList.contains('monaco-editor') || node.classList.contains('overflow-guard') || node.classList.contains('view-lines') || node.classList.contains('editor-scrollable'))) continue;
                 if (node.getAttribute('contenteditable') === 'true') {
                     translateAttributes(node);
-                    const debugCombinedText = [node.textContent, node.getAttribute('placeholder'), node.getAttribute('data-placeholder'), node.getAttribute('aria-label')].filter(Boolean).join(' ');
+                    const debugCombinedText = [node.textContent, node.getAttribute('placeholder'), node.getAttribute('aria-label')].filter(Boolean).join(' ');
                     if (debugShouldInspect(debugCombinedText)) {
                         debugLogOnce('H2', 'CursorTranslate.py:translateTree:contenteditable-skip', 'Target element skipped because it is contenteditable', {
                             combinedText: debugSafeText(debugCombinedText),
@@ -700,7 +682,20 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function enqueueNode(node) {
-        pendingNodes.push(node);
+        if (!node) return;
+        if (pendingNodes.has(document.body)) {
+            if (!isTranslationScheduled) {
+                isTranslationScheduled = true;
+                requestAnimationFrame(processPendingNodes);
+            }
+            return;
+        }
+        if (pendingNodes.size >= maxPendingNodes && document.body) {
+            pendingNodes.clear();
+            pendingNodes.add(document.body);
+        } else {
+            pendingNodes.add(node);
+        }
         if (!isTranslationScheduled) {
             isTranslationScheduled = true;
             requestAnimationFrame(processPendingNodes);
@@ -708,12 +703,21 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function processPendingNodes() {
-        const nodesToProcess = pendingNodes.splice(0, pendingNodes.length);
+        const nodesToProcess = [];
+        for (const node of pendingNodes) {
+            nodesToProcess.push(node);
+            pendingNodes.delete(node);
+            if (nodesToProcess.length >= maxNodesPerFrame) break;
+        }
         isTranslationScheduled = false;
         for (const node of nodesToProcess) {
             try {
                 translateTree(node);
             } catch (error) {}
+        }
+        if (pendingNodes.size > 0) {
+            isTranslationScheduled = true;
+            requestAnimationFrame(processPendingNodes);
         }
     }
 
@@ -723,46 +727,21 @@ def generate_js_code(translation_dictionary_data):
         } catch (error) {}
     }
 
-    function rescanTranslatableOverlays() {
-        try {
-            const overlayElements = document.querySelectorAll(translatableOverlaySelector);
-            for (const overlayElement of overlayElements) {
-                translateTree(overlayElement);
-            }
-        } catch (error) {}
-    }
-
-    function scheduleOverlayRescans() {
-        if (overlayRescanTimer !== null) {
-            clearInterval(overlayRescanTimer);
-            overlayRescanTimer = null;
-        }
-
-        let overlayRescanCount = 0;
-        rescanTranslatableOverlays();
-        overlayRescanTimer = setInterval(function () {
-            overlayRescanCount += 1;
-            rescanTranslatableOverlays();
-            if (overlayRescanCount >= 60) {
-                clearInterval(overlayRescanTimer);
-                overlayRescanTimer = null;
-            }
-        }, 50);
-    }
-
     function scheduleStartupRescans() {
-        const delays = [300, 800, 1500, 3000, 6000, 10000];
+        const delays = [300, 1200, 2500];
         for (const delay of delays) {
             setTimeout(rescanDocument, delay);
         }
+    }
 
-        const intervalId = setInterval(function () {
-            rescanCount += 1;
-            rescanDocument();
-            if (rescanCount >= 24) {
-                clearInterval(intervalId);
-            }
-        }, 2500);
+    function shouldSkipMutationTarget(node) {
+        const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        if (!element) return true;
+        try {
+            return Boolean(element.closest(editorAreaSelector));
+        } catch (error) {
+            return false;
+        }
     }
 
     function handleMutations(mutations) {
@@ -770,22 +749,16 @@ def generate_js_code(translation_dictionary_data):
             if (mutation.type === 'childList') {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) {
+                        if (shouldSkipMutationTarget(node)) continue;
                         enqueueNode(node);
-                        if (isInTranslatableOverlay(node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)) {
-                            scheduleOverlayRescans();
-                        }
                     }
                 }
             } else if (mutation.type === 'characterData' && mutation.target.nodeType === Node.TEXT_NODE) {
+                if (shouldSkipMutationTarget(mutation.target)) continue;
                 enqueueNode(mutation.target);
-                if (isInTranslatableOverlay(mutation.target.parentElement)) {
-                    scheduleOverlayRescans();
-                }
             } else if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
+                if (shouldSkipMutationTarget(mutation.target)) continue;
                 enqueueNode(mutation.target);
-                if (isInTranslatableOverlay(mutation.target)) {
-                    scheduleOverlayRescans();
-                }
             }
         }
     }
@@ -831,15 +804,11 @@ def generate_js_code(translation_dictionary_data):
         } catch (error) {}
     }
 
-    installNotificationTranslator();
+    // Do not wrap the native Notification API by default; wrapping it can affect
+    // Cursor's own completion/attention notification behavior on some builds.
+    // installNotificationTranslator();
     translateTree(document.body);
     scheduleStartupRescans();
-
-    document.addEventListener('contextmenu', function () {
-        scheduleOverlayRescans();
-        setTimeout(scheduleOverlayRescans, 80);
-        setTimeout(scheduleOverlayRescans, 250);
-    }, true);
 
     const observer = new MutationObserver(handleMutations);
     observer.observe(document.body, {
@@ -847,7 +816,7 @@ def generate_js_code(translation_dictionary_data):
         subtree: true,
         characterData: true,
         attributes: true,
-        attributeFilter: ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description', 'data-placeholder', 'data-lexical-placeholder', 'data-tooltip', 'data-title']
+        attributeFilter: ['title', 'aria-label', 'placeholder', 'aria-placeholder', 'aria-description']
     });
 })();
 '''
@@ -900,13 +869,31 @@ def get_workbench_source_path():
 
 
 def get_main_process_path():
-    """获取 Cursor 主进程打包源码路径。"""
+    """获取 Electron 主进程打包文件路径。"""
     return os.path.join(get_cursor_app_path(), MAIN_PROCESS_RELATIVE_PATH)
 
 
 def get_nls_messages_path():
-    """获取 Cursor 本地化消息资源路径。"""
+    """获取 Cursor 打包后的 nls 消息文件路径。"""
     return os.path.join(get_cursor_app_path(), NLS_MESSAGES_RELATIVE_PATH)
+
+
+def get_main_process_backup_path():
+    """获取 main.js 备份文件路径。"""
+    return get_main_process_path() + BACKUP_SUFFIX
+
+
+def get_nls_messages_backup_path():
+    """获取 nls.messages.json 备份文件路径。"""
+    return get_nls_messages_path() + BACKUP_SUFFIX
+
+
+def get_native_resource_paths():
+    """获取需要额外处理的原生菜单资源路径。"""
+    return (
+        ("main.js", get_main_process_path(), get_main_process_backup_path()),
+        ("nls.messages.json", get_nls_messages_path(), get_nls_messages_backup_path()),
+    )
 
 
 def get_cursor_skills_dirs():
@@ -941,24 +928,6 @@ def get_product_json_path():
 def get_product_backup_path():
     """获取 product.json 备份路径"""
     return get_product_json_path() + BACKUP_SUFFIX
-
-
-def get_main_process_backup_path():
-    """获取 main.js 备份路径。"""
-    return get_main_process_path() + BACKUP_SUFFIX
-
-
-def get_nls_messages_backup_path():
-    """获取 nls.messages.json 备份路径。"""
-    return get_nls_messages_path() + BACKUP_SUFFIX
-
-
-def get_native_resource_paths():
-    """获取需要额外处理的原生菜单/通知资源文件。"""
-    return [
-        ("main.js", get_main_process_path(), get_main_process_backup_path()),
-        ("nls.messages.json", get_nls_messages_path(), get_nls_messages_backup_path()),
-    ]
 
 
 def get_default_install_path_hint():
@@ -1450,114 +1419,6 @@ def write_translation_js(translation_dictionary_data):
     print(f"[写入] 脚本已写入: {js_path}")
 
 
-def get_native_resource_translations(translation_dictionary_data):
-    """获取需要写入 Electron 原生菜单/通知资源的翻译。"""
-    return {
-        source_text: translation_dictionary_data[source_text]
-        for source_text in NATIVE_MENU_TRANSLATION_KEYS
-        if source_text in translation_dictionary_data
-    }
-
-
-def replace_native_resource_text(content, native_translations):
-    """替换打包资源中的字符串字面量，避免误改业务代码标识。"""
-    updated_content = content
-    replacement_counts = {}
-
-    for source_text, translated_text in native_translations.items():
-        if source_text == translated_text:
-            continue
-
-        count = 0
-        source_literals = {
-            json.dumps(source_text, ensure_ascii=False),
-            json.dumps(source_text, ensure_ascii=True),
-        }
-        translated_literal = json.dumps(translated_text, ensure_ascii=False)
-
-        for source_literal in source_literals:
-            literal_count = updated_content.count(source_literal)
-            if literal_count == 0:
-                continue
-            updated_content = updated_content.replace(source_literal, translated_literal)
-            count += literal_count
-
-        if count > 0:
-            replacement_counts[source_text] = count
-
-    return updated_content, replacement_counts
-
-
-def should_refresh_native_backup(resource_path, backup_path, native_translations):
-    """判断原生资源备份是否应随 Cursor 更新而刷新。"""
-    if not os.path.exists(backup_path):
-        return True
-
-    try:
-        content = read_text_file(resource_path)
-    except Exception:
-        return False
-
-    translated_literals = [
-        json.dumps(translated_text, ensure_ascii=False)
-        for translated_text in native_translations.values()
-    ]
-    # 如果当前文件已包含汉化后的原生字符串，说明它可能是已打补丁状态，
-    # 此时必须保留旧备份，避免把“已汉化文件”覆盖成新的备份。
-    return not any(translated_literal in content for translated_literal in translated_literals)
-
-
-def apply_native_resource_translations(translation_dictionary_data):
-    """翻译 Electron 主进程/本地化资源中的原生菜单与通知文本。"""
-    native_translations = get_native_resource_translations(translation_dictionary_data)
-    if not native_translations:
-        print("[原生] 未找到可用的原生菜单翻译词条，已跳过")
-        return
-
-    patched_files = 0
-    total_replacements = 0
-
-    for label, resource_path, backup_path in get_native_resource_paths():
-        if not os.path.exists(resource_path):
-            print(f"[原生] 未找到 {label}，已跳过: {resource_path}")
-            continue
-
-        original_content = read_text_file(resource_path)
-        updated_content, replacement_counts = replace_native_resource_text(original_content, native_translations)
-        if updated_content == original_content:
-            print(f"[原生] {label} 未发现需要替换的原生菜单文本")
-            continue
-
-        refresh_backup = should_refresh_native_backup(resource_path, backup_path, native_translations)
-        prepare_backup_file(resource_path, backup_path, label, refresh_existing=refresh_backup)
-        write_text_file(resource_path, updated_content)
-
-        replacement_total = sum(replacement_counts.values())
-        patched_files += 1
-        total_replacements += replacement_total
-        translated_keys = "、".join(replacement_counts.keys())
-        print(f"[原生] 已更新 {label}: {replacement_total} 处（{translated_keys}）")
-
-    if patched_files == 0:
-        print("[原生] 未修改原生资源；如果任务栏右键仍是英文，可能需要继续定位新的资源文件")
-    else:
-        print(f"[原生] 已更新 {patched_files} 个资源文件，共 {total_replacements} 处；重启 Cursor 后任务栏/托盘菜单生效")
-
-
-def restore_native_resources(keep_backups=False):
-    """恢复 Electron 原生菜单/通知资源。"""
-    for label, resource_path, backup_path in get_native_resource_paths():
-        if os.path.exists(backup_path):
-            shutil.copy2(backup_path, resource_path)
-            if keep_backups:
-                print(f"[原生] 已从备份恢复 {label}，备份已保留: {backup_path}")
-            else:
-                os.remove(backup_path)
-                print(f"[原生] 已恢复 {label}: {resource_path}")
-        elif not keep_backups:
-            cleanup_rotated_backups([backup_path])
-
-
 def insert_injection_code(html_content, injected_code):
     body_close_index = html_content.rfind('</body>')
     if body_close_index != -1:
@@ -1710,6 +1571,103 @@ def restore_checksum(keep_backups=False):
             print(f"[校验] 已恢复 product.json 原始校验值")
     elif not keep_backups:
         cleanup_rotated_backups([product_backup_path])
+
+
+def get_native_resource_translations(translation_dictionary_data):
+    """只提取原生菜单需要的少量词条，避免大范围替换打包资源。"""
+    return {
+        source_text: translation_dictionary_data[source_text]
+        for source_text in NATIVE_MENU_TRANSLATION_KEYS
+        if source_text in translation_dictionary_data and translation_dictionary_data[source_text] != source_text
+    }
+
+
+def replace_native_resource_text(content, native_translations):
+    """替换原生资源中的菜单字符串。限定为 JSON/JS 字符串字面量，降低误替换风险。"""
+    updated_content = content
+    replacement_count = 0
+    for source_text, translated_text in native_translations.items():
+        source_literal = json.dumps(source_text, ensure_ascii=False)
+        translated_literal = json.dumps(translated_text, ensure_ascii=False)
+        updated_content, double_quote_count = re.subn(
+            re.escape(source_literal),
+            lambda _match, value=translated_literal: value,
+            updated_content,
+        )
+
+        source_literal_ascii = json.dumps(source_text, ensure_ascii=True)
+        translated_literal_ascii = json.dumps(translated_text, ensure_ascii=True)
+        ascii_count = 0
+        if source_literal_ascii != source_literal:
+            updated_content, ascii_count = re.subn(
+                re.escape(source_literal_ascii),
+                lambda _match, value=translated_literal_ascii: value,
+                updated_content,
+            )
+
+        single_quote_pattern = re.compile(r"'" + re.escape(source_text).replace(r"\'", "'") + r"'")
+        updated_content, single_quote_count = single_quote_pattern.subn(
+            lambda _match, value="'" + translated_text.replace("\\", "\\\\").replace("'", "\\'") + "'": value,
+            updated_content,
+        )
+        replacement_count += double_quote_count + ascii_count + single_quote_count
+
+    return updated_content, replacement_count
+
+
+def should_refresh_native_backup(resource_path, backup_path, native_translations):
+    """判断是否应刷新原生资源备份，避免把已汉化文件覆盖为备份。"""
+    if not os.path.exists(backup_path):
+        return True
+
+    try:
+        resource_content = read_text_file(resource_path)
+    except Exception:
+        return False
+
+    # 当前资源仍包含英文菜单词时，通常代表 Cursor 已更新或文件尚未被本工具汉化。
+    return any(json.dumps(source_text, ensure_ascii=False) in resource_content for source_text in native_translations)
+
+
+def apply_native_resource_translations(translation_dictionary_data):
+    """汉化 Electron 原生菜单/上下文菜单资源。"""
+    native_translations = get_native_resource_translations(translation_dictionary_data)
+    if not native_translations:
+        return
+
+    for label, resource_path, backup_path in get_native_resource_paths():
+        if not os.path.exists(resource_path):
+            print(f"[跳过] 未找到原生菜单资源 {label}: {resource_path}")
+            continue
+
+        try:
+            original_content = read_text_file(resource_path)
+            updated_content, replacement_count = replace_native_resource_text(original_content, native_translations)
+            if updated_content == original_content:
+                print(f"[原生菜单] {label} 无需更新或未找到匹配词条")
+                continue
+
+            refresh_existing = should_refresh_native_backup(resource_path, backup_path, native_translations)
+            prepare_backup_file(resource_path, backup_path, label, refresh_existing=refresh_existing)
+            write_text_file(resource_path, updated_content)
+            print(f"[原生菜单] 已更新 {label}: {replacement_count} 处")
+        except Exception as error:
+            print(f"[错误] 更新原生菜单资源失败: {label}: {error}")
+            sys.exit(1)
+
+
+def restore_native_resources(keep_backups=False):
+    """恢复原生菜单资源。"""
+    for label, resource_path, backup_path in get_native_resource_paths():
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, resource_path)
+            if keep_backups:
+                print(f"[原生菜单] 已从备份恢复 {label}，备份已保留: {backup_path}")
+            else:
+                os.remove(backup_path)
+                print(f"[原生菜单] 已恢复 {label}")
+        elif not keep_backups:
+            cleanup_rotated_backups([backup_path])
 
 
 def remove_injected_script(html_content):
