@@ -30,9 +30,6 @@
 "Upgrade to Pro" => "升级到专业版"
 "Upgrade to Pro now" => "立即升级到专业版"
 "Upgrade Plan" => "升级计划"
-"Free" => "免费版"
-"Pro" => "专业版"
-"Business" => "企业版"
 "Usage" => "用量"
 "On-Demand" => "按需"
 "On-Demand Spending" => "按需消费"
@@ -758,13 +755,7 @@
 "Include Archived" => "包含归档"
 "Desktop" => "桌面"
 "Web" => "网页"
-"Slack" => "Slack"
-"Linear" => "Linear"
-"SCM" => "源码管理"
-"CLI" => "命令行"
 "Setup" => "设置"
-"SDK" => "SDK"
-"API" => "API"
 "Bugbot Autofix" => "Bugbot 自动修复"
 "Frontend QA" => "前端 QA"
 "Branch Name" => "分支名称"
@@ -1617,7 +1608,6 @@
 
 # Memory Tool
 "Allows the agent to read and write persistent notes with the memory tool" => "允许智能体使用记忆工具读写持久化笔记"
-"Memories" => "记忆"
 
 # General UI
 "Repository" => "仓库"

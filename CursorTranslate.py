@@ -144,7 +144,7 @@ SOURCE_EXTRACTION_CONTEXT_KEYWORDS = (
     "plugins",
 )
 
-SOURCE_EXTRACTION_PROTECTED_TEXTS = {
+RUNTIME_PROTECTED_EXACT_TEXTS = (
     "Auto",
     "None",
     "Minimal",
@@ -153,12 +153,25 @@ SOURCE_EXTRACTION_PROTECTED_TEXTS = {
     "Low",
     "Extra High",
     "Max",
-    "Canvas",
-    "Memories",
+    "Free",
+    "Pro",
+    "Business",
+    "CLI",
+    "SCM",
+    "SDK",
+    "API",
+    "Slack",
+    "Linear",
     "GitHub",
     "Microsoft Teams",
     "Sentry",
     "Pager Duty",
+    "Canvas",
+    "Memories",
+)
+
+SOURCE_EXTRACTION_PROTECTED_TEXTS = {
+    *RUNTIME_PROTECTED_EXACT_TEXTS,
     "Enter",
     "Escape",
     "Backspace",
@@ -274,6 +287,7 @@ def read_translation_dictionary():
 def generate_js_code(translation_dictionary_data):
     """生成包含翻译和实时刷新的 JavaScript 代码"""
     translation_dictionary_json = json.dumps(translation_dictionary_data, ensure_ascii=False)
+    protected_exact_texts_json = json.dumps(RUNTIME_PROTECTED_EXACT_TEXTS, ensure_ascii=False)
 
     return '''\
 /*
@@ -293,7 +307,7 @@ def generate_js_code(translation_dictionary_data):
             normalizedTranslationDictionary.set(normalizedSourceText, translatedText);
         }
     }
-    const protectedExactTexts = new Set(['Auto', 'None', 'Minimal', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
+    const protectedExactTexts = new Set(''' + protected_exact_texts_json + ''');
     const translationPatterns = [
         [/^(\\d+) requests? remaining$/i, "$1 次请求剩余"],
         [/^(\\d+) of (\\d+) requests?$/i, "$1 / $2 次请求"],

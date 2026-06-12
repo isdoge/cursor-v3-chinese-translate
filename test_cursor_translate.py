@@ -14,6 +14,7 @@ from CursorTranslate import (
     MACOS_CONTENTS_APP_RELATIVE_DIR,
     parse_translation_entry,
     generate_js_code,
+    RUNTIME_PROTECTED_EXACT_TEXTS,
     resolve_cursor_app_path,
     remove_injected_script,
     insert_injection_code,
@@ -69,18 +70,12 @@ class TestParseTranslationEntry(unittest.TestCase):
 class TestGenerateJsCode(unittest.TestCase):
     """测试前端翻译脚本生成"""
 
-    def test_generated_js_protects_model_effort_labels(self):
-        """模型推理强度等短标签即使误加词典也不应被运行时翻译"""
-        js_code = generate_js_code({
-            "Auto": "自动",
-            "None": "无",
-            "High": "高",
-        })
+    def test_generated_js_protects_exact_identifier_labels(self):
+        """模型强度、套餐名和技术缩写等短标识即使误加词典也不应被翻译"""
+        js_code = generate_js_code({protected_text: "误译" for protected_text in RUNTIME_PROTECTED_EXACT_TEXTS})
+        protected_exact_texts_json = json.dumps(RUNTIME_PROTECTED_EXACT_TEXTS, ensure_ascii=False)
 
-        self.assertIn("const protectedExactTexts = new Set", js_code)
-        self.assertIn("'Auto'", js_code)
-        self.assertIn("'None'", js_code)
-        self.assertIn("'High'", js_code)
+        self.assertIn(f"const protectedExactTexts = new Set({protected_exact_texts_json});", js_code)
         self.assertIn("protectedExactTexts.has(normalizeTranslationWhitespace(text))", js_code)
 
 
