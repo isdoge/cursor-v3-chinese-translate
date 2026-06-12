@@ -145,6 +145,9 @@ SOURCE_EXTRACTION_CONTEXT_KEYWORDS = (
 )
 
 SOURCE_EXTRACTION_PROTECTED_TEXTS = {
+    "Auto",
+    "None",
+    "Minimal",
     "High",
     "Medium",
     "Low",
@@ -290,6 +293,7 @@ def generate_js_code(translation_dictionary_data):
             normalizedTranslationDictionary.set(normalizedSourceText, translatedText);
         }
     }
+    const protectedExactTexts = new Set(['Auto', 'None', 'Minimal', 'Low', 'Medium', 'High', 'Extra High', 'Max']);
     const translationPatterns = [
         [/^(\\d+) requests? remaining$/i, "$1 次请求剩余"],
         [/^(\\d+) of (\\d+) requests?$/i, "$1 / $2 次请求"],
@@ -364,6 +368,10 @@ def generate_js_code(translation_dictionary_data):
     }
 
     function lookupTranslation(text) {
+        if (protectedExactTexts.has(normalizeTranslationWhitespace(text))) {
+            return null;
+        }
+
         if (translationDictionary.has(text)) {
             return translationDictionary.get(text);
         }

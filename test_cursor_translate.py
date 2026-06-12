@@ -13,6 +13,7 @@ from CursorTranslate import (
     MACOS_APP_RELATIVE_DIR,
     MACOS_CONTENTS_APP_RELATIVE_DIR,
     parse_translation_entry,
+    generate_js_code,
     resolve_cursor_app_path,
     remove_injected_script,
     insert_injection_code,
@@ -63,6 +64,24 @@ class TestParseTranslationEntry(unittest.TestCase):
         source, translated = parse_translation_entry(line, 1)
         self.assertEqual(source, 'Say "Hello"')
         self.assertEqual(translated, '说"你好"')
+
+
+class TestGenerateJsCode(unittest.TestCase):
+    """测试前端翻译脚本生成"""
+
+    def test_generated_js_protects_model_effort_labels(self):
+        """模型推理强度等短标签即使误加词典也不应被运行时翻译"""
+        js_code = generate_js_code({
+            "Auto": "自动",
+            "None": "无",
+            "High": "高",
+        })
+
+        self.assertIn("const protectedExactTexts = new Set", js_code)
+        self.assertIn("'Auto'", js_code)
+        self.assertIn("'None'", js_code)
+        self.assertIn("'High'", js_code)
+        self.assertIn("protectedExactTexts.has(normalizeTranslationWhitespace(text))", js_code)
 
 
 class TestRemoveInjectedScript(unittest.TestCase):
