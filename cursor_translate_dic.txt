@@ -1641,6 +1641,10 @@
 
 # Git UI
 "No Uncommitted Changes" => "无未提交的更改"
+"Uncommitted" => "未提交"
+"Unstaged" => "未暂存"
+"Staged" => "已暂存"
+"Branch Commits" => "分支提交"
 "All Branch Changes" => "所有分支更改"
 "Use a Git repository to track changes" => "使用 Git 仓库跟踪更改"
 "Initialize Repository" => "初始化仓库"
